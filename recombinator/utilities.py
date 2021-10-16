@@ -1,13 +1,17 @@
-from enum import Enum
-from fractions import Fraction
-import math
-import numpy as np
 import typing as tp
 
+import math
+from enum import Enum
+from fractions import Fraction
 
-def calculate_number_of_blocks(sample_length: int,
-                               block_length: int,
-                               overhang: bool = False) -> int:
+import numpy as np
+
+from recombinator.types import ArrayFloat, ArrayInt
+
+
+def calculate_number_of_blocks(
+    sample_length: int, block_length: int, overhang: bool = False
+) -> int:
     """
     This function calculates the number of blocks contained
     in a sample with a given block length.
@@ -28,10 +32,12 @@ def calculate_number_of_blocks(sample_length: int,
         return math.floor(sample_length / block_length)
 
 
-def number_of_permutations(sub_sample_length: int,
-                           block_length: int,
-                           number_of_blocks: int,
-                           replacement: bool = False) -> int:
+def number_of_permutations(
+    sub_sample_length: int,
+    block_length: int,
+    number_of_blocks: int,
+    replacement: bool = False,
+) -> int:
     """
     Computes the number of possible permutations of a certain number of
     blocks with a given length in creating sub-samples of a particular
@@ -48,25 +54,32 @@ def number_of_permutations(sub_sample_length: int,
 
     blocks_to_sample = math.ceil(sub_sample_length / block_length)
 
+    number_of_permutations_for_replacement: int = number_of_blocks ** blocks_to_sample
+
     if replacement:
-        return number_of_blocks ** blocks_to_sample
+        return number_of_permutations_for_replacement
     else:
         if blocks_to_sample > number_of_blocks:
             raise ValueError(
-                f'The number of blocks to sample ({blocks_to_sample}) to '
-                f'create a subsample of length {sub_sample_length} without '
-                f'replacement exceeds the number of blocks available '
-                f'({number_of_blocks}).')
+                f"The number of blocks to sample ({blocks_to_sample}) to "
+                f"create a subsample of length {sub_sample_length} without "
+                f"replacement exceeds the number of blocks available "
+                f"({number_of_blocks})."
+            )
 
-        n_permutations = Fraction(math.factorial(number_of_blocks),
-                            math.factorial(number_of_blocks - blocks_to_sample))
+        n_permutations = Fraction(
+            math.factorial(number_of_blocks),
+            math.factorial(number_of_blocks - blocks_to_sample),
+        )
         return int(n_permutations)
 
 
-def number_of_combinations(sub_sample_length: int,
-                           block_length: int,
-                           number_of_blocks: int,
-                           replacement: bool = False) -> int:
+def number_of_combinations(
+    sub_sample_length: int,
+    block_length: int,
+    number_of_blocks: int,
+    replacement: bool = False,
+) -> int:
     """
     Computes the number of possible combinations of a certain number of
     blocks with a given length in creating sub-samples of a particular
@@ -84,23 +97,24 @@ def number_of_combinations(sub_sample_length: int,
     blocks_to_sample = math.ceil(sub_sample_length / block_length)
 
     if replacement:
-        n_combinations \
-            = Fraction(
-                int(math.factorial(blocks_to_sample + number_of_blocks - 1)),
-                math.factorial(blocks_to_sample)
-                * math.factorial(number_of_blocks - 1))
+        n_combinations = Fraction(
+            int(math.factorial(blocks_to_sample + number_of_blocks - 1)),
+            math.factorial(blocks_to_sample) * math.factorial(number_of_blocks - 1),
+        )
         return int(n_combinations)
     else:
-        n_combinations \
-            = Fraction(math.factorial(number_of_blocks),
-                       math.factorial(number_of_blocks - blocks_to_sample)
-                       * math.factorial(blocks_to_sample))
+        n_combinations = Fraction(
+            math.factorial(number_of_blocks),
+            math.factorial(number_of_blocks - blocks_to_sample)
+            * math.factorial(blocks_to_sample),
+        )
         return int(n_combinations)
 
 
 # @numba.njit
-def _verify_shape_of_bootstrap_input_data_and_get_dimensions(x: np.ndarray) \
-        -> tp.Tuple[int, int]:
+def _verify_shape_of_bootstrap_input_data_and_get_dimensions(
+    x: tp.Union[ArrayInt, ArrayFloat]
+) -> tp.Tuple[int, int]:
     if x.ndim == 1:
         # the input data is a one-dimensional time-series
         T = len(x)
@@ -109,15 +123,18 @@ def _verify_shape_of_bootstrap_input_data_and_get_dimensions(x: np.ndarray) \
         # the data is a multi-dimensional time-series
         T, k = x.shape
     else:
-        raise ValueError('The argument y must be a NumPy array with one '
-                         '(for a univariate time-series) or two axes '
-                         '(for a multi-variate time-series).')
+        raise ValueError(
+            "The argument y must be a NumPy array with one "
+            "(for a univariate time-series) or two axes "
+            "(for a multi-variate time-series)."
+        )
 
     return T, k
 
 
-def _grab_sub_samples_from_indices(x: np.ndarray,
-                                   u: np.ndarray) -> np.ndarray:
+def _grab_sub_samples_from_indices(
+    x: tp.Union[ArrayInt, ArrayFloat], u: tp.Union[ArrayInt, ArrayFloat]
+) -> tp.Union[ArrayInt, ArrayFloat]:
     """
     This function selects sub-samples of the data array y at the indices in u.
     There are B replications.
@@ -128,11 +145,12 @@ def _grab_sub_samples_from_indices(x: np.ndarray,
     Returns:
 
     """
-
     if x.ndim == 1:
-        return x[u]
+        array: tp.Union[ArrayInt, ArrayFloat] = x[u]
+        return array
     else:
-        return x[u, :]
+        ndarray: tp.Union[ArrayInt, ArrayFloat] = x[u, :]
+        return ndarray
 
 
 class BlockBootstrapType(Enum):
@@ -143,12 +161,13 @@ class BlockBootstrapType(Enum):
 
 
 def _verify_block_bootstrap_arguments_internal(
-        x: np.ndarray,
-        block_length: tp.Union[int, float],
-        replications: int,
-        replace: bool,
-        stationary_bootstrap: bool = False,
-        sub_sample_length: tp.Optional[int] = None) -> None:
+    x: tp.Union[ArrayInt, ArrayFloat],
+    block_length: tp.Union[int, float],
+    replications: int,
+    replace: bool,
+    stationary_bootstrap: bool = False,
+    sub_sample_length: tp.Optional[int] = None,
+) -> None:
     """
     This function checks that the arguments passed to block bootstrap functions
     satisfy certain constraints. If a violation is detected, an exception is
@@ -168,45 +187,47 @@ def _verify_block_bootstrap_arguments_internal(
     T, k = _verify_shape_of_bootstrap_input_data_and_get_dimensions(x)
 
     if stationary_bootstrap:
-        if not isinstance(block_length, float) and \
-                not isinstance(block_length, int):
-            raise ValueError('The block_length must be int or float.')
+        if not isinstance(block_length, (float, int)):
+            raise ValueError("The block_length must be int or float.")
     else:
         if not isinstance(block_length, int):
-            raise ValueError('The block_length must be int.')
+            raise ValueError("The block_length must be int.")
 
     if not sub_sample_length:
         sub_sample_length = T
 
     if block_length <= 0:
-        raise ValueError('The argument block_length must be strictly positive.')
+        raise ValueError("The argument block_length must be strictly positive.")
 
     if replications <= 0:
-        raise ValueError('The argument replications must be strictly positive.')
+        raise ValueError("The argument replications must be strictly positive.")
 
     if sub_sample_length <= 0:
-        raise ValueError('The argument sub_sample_length must be strictly '
-                         'positive.')
+        raise ValueError("The argument sub_sample_length must be strictly positive.")
 
     if block_length > T:
         raise ValueError(
-            'The argument block_length must not exceed the size of the data.')
+            "The argument block_length must not exceed the size of the data."
+        )
 
     if sub_sample_length > T:
         if not replace:
-        # if not replace or stationary_bootstrap:
-            raise ValueError(f'The argument '
-                             f'sub_sample_length={sub_sample_length} must not '
-                             f'exceed the length of the data={T}.')
+            # if not replace or stationary_bootstrap:
+            raise ValueError(
+                f"The argument "
+                f"sub_sample_length={sub_sample_length} must not "
+                f"exceed the length of the data={T}."
+            )
 
 
 def _verify_block_bootstrap_arguments(
-        x: np.ndarray,
-        block_length: tp.Union[int, float],
-        replications: int,
-        replace: bool,
-        bootstrap_type: BlockBootstrapType,
-        sub_sample_length: tp.Optional[int] = None) -> None:
+    x: tp.Union[ArrayInt, ArrayFloat],
+    block_length: tp.Union[int, float],
+    replications: int,
+    replace: bool,
+    bootstrap_type: BlockBootstrapType,
+    sub_sample_length: tp.Optional[int] = None,
+) -> None:
     """
     This function checks that the arguments passed to block bootstrap functions
     satisfy certain constraints. If a violation is detected, an exception is
@@ -223,35 +244,36 @@ def _verify_block_bootstrap_arguments(
     Returns: None
 
     """
-    stationary_bootstrap = (bootstrap_type is BlockBootstrapType.STATIONARY)
+    stationary_bootstrap = bootstrap_type is BlockBootstrapType.STATIONARY
     _verify_block_bootstrap_arguments_internal(
         x,
         block_length=block_length,
         replications=replications,
         replace=replace,
         stationary_bootstrap=stationary_bootstrap,
-        sub_sample_length=sub_sample_length)
+        sub_sample_length=sub_sample_length,
+    )
 
 
 def _verify_iid_bootstrap_arguments(
-                x: np.ndarray,
-                replications: int,
-                replace: bool,
-                sub_sample_length: tp.Optional[int] = None) -> None:
+    x: tp.Union[ArrayInt, ArrayFloat],
+    replications: int,
+    replace: bool,
+    sub_sample_length: tp.Optional[int] = None,
+) -> None:
     _verify_block_bootstrap_arguments(
-                        x=x,
-                        block_length=1,
-                        replications=replications,
-                        replace=replace,
-                        bootstrap_type=BlockBootstrapType.MOVING_BLOCK,
-                        sub_sample_length=sub_sample_length)
+        x=x,
+        block_length=1,
+        replications=replications,
+        replace=replace,
+        bootstrap_type=BlockBootstrapType.MOVING_BLOCK,
+        sub_sample_length=sub_sample_length,
+    )
 
 
-def _generate_block_start_indices_and_successive_indices(sample_length: int,
-                                                         block_length: int,
-                                                         circular: bool,
-                                                         successive_3d: bool) \
-        -> tp.Tuple[np.ndarray, np.ndarray]:
+def _generate_block_start_indices_and_successive_indices(
+    sample_length: int, block_length: int, circular: bool, successive_3d: bool
+) -> tp.Tuple[tp.Union[ArrayInt, ArrayFloat], tp.Union[ArrayInt, ArrayFloat]]:
     block_start_indices = list(range(0, sample_length, block_length))
     if not circular:
         if max(block_start_indices) + block_length >= sample_length:
@@ -260,10 +282,12 @@ def _generate_block_start_indices_and_successive_indices(sample_length: int,
     # generate a 1-d array containing the sequence of integers from
     # 0 to block_length-1 with shape (1, block_length)
     if successive_3d:
-        successive_indices \
-            = np.arange(block_length, dtype=int).reshape((1, 1, block_length))
+        successive_indices = np.arange(block_length, dtype=int).reshape(
+            (1, 1, block_length)
+        )
     else:
-        successive_indices \
-            = np.arange(block_length, dtype=int).reshape((1, block_length))
+        successive_indices = np.arange(block_length, dtype=int).reshape(
+            (1, block_length)
+        )
 
     return np.array(block_start_indices), successive_indices

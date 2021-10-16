@@ -1,11 +1,13 @@
-import numpy as np
 import typing as tp
+
+import numpy as np
+
+from recombinator.types import ArrayFloat, ArrayInt
 
 
 def estimate_bias_from_bootstrap(
-        bootstrap_estimates: np.ndarray,
-        original_estimate: float) \
-        -> float:
+    bootstrap_estimates: tp.Union[ArrayInt, ArrayFloat], original_estimate: float
+) -> float:
     """
     This function estimates the bias of an estimator given an estimate of a
     statistic from the original data as well as variety of estimates of the same
@@ -18,16 +20,16 @@ def estimate_bias_from_bootstrap(
         original_estimate: the statistic computed from the original data
     """
 
-    bootstrap_estimate_of_bias \
-        = np.mean(bootstrap_estimates) - original_estimate
-    return np.asscalar(bootstrap_estimate_of_bias)
+    bootstrap_estimate_of_bias = np.mean(bootstrap_estimates) - original_estimate
+    result: float = np.asscalar(bootstrap_estimate_of_bias)
+    return result
 
 
 def estimate_standard_error_from_bootstrap(
-        bootstrap_estimates: np.ndarray,
-        original_estimate: float,
-        ddof: int = 0) \
-        -> float:
+    bootstrap_estimates: tp.Union[ArrayInt, ArrayFloat],
+    original_estimate: float,
+    ddof: int = 0,
+) -> float:
     """
     This function estimates the standard error of an estimator given an estimate
     of a statistic from the original data as well as variety of estimates of the
@@ -42,18 +44,17 @@ def estimate_standard_error_from_bootstrap(
     """
 
     B = len(bootstrap_estimates)
-    bootstrap_estimate_of_variance \
-        = np.sum((bootstrap_estimates - original_estimate) ** 2) / (B - ddof)
-    bootstrap_estimate_of_standard_error \
-        = np.sqrt(bootstrap_estimate_of_variance)
-
-    return bootstrap_estimate_of_standard_error
+    bootstrap_estimate_of_variance = np.sum(
+        (bootstrap_estimates - original_estimate) ** 2
+    ) / (B - ddof)
+    bootstrap_estimate_of_standard_error = np.sqrt(bootstrap_estimate_of_variance)
+    result: float = bootstrap_estimate_of_standard_error
+    return result
 
 
 def estimate_confidence_interval_from_bootstrap(
-        bootstrap_estimates: np.ndarray,
-        confidence_level: float = 95.0) \
-        -> tp.Tuple[float, float]:
+    bootstrap_estimates: tp.Union[ArrayInt, ArrayFloat], confidence_level: float = 95.0
+) -> tp.Tuple[float, float]:
     """
     This function estimates a confidence interval of an estimator given a
     variety of estimates of the same statistic from resampled data.
@@ -66,8 +67,9 @@ def estimate_confidence_interval_from_bootstrap(
     """
 
     percent = 100.0 - confidence_level
-    bootstrap_confidence_interval \
-        = (np.percentile(bootstrap_estimates, percent / 2.0),
-           np.percentile(bootstrap_estimates, 100.0 - percent / 2.0))
+    bootstrap_confidence_interval = (
+        np.percentile(bootstrap_estimates, percent / 2.0),
+        np.percentile(bootstrap_estimates, 100.0 - percent / 2.0),
+    )
 
     return bootstrap_confidence_interval

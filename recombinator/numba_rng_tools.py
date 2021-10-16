@@ -22,8 +22,9 @@ def check_random_state(seed):
         return np.random.RandomState(seed)
     if isinstance(seed, np.random.RandomState):
         return seed
-    raise ValueError(f'{seed} cannot be used to seed a '
-                     f'numpy.random.RandomState instance')
+    raise ValueError(
+        f"{seed} cannot be used to seed a " f"numpy.random.RandomState instance"
+    )
 
 
 def _copy_np_state(r, ptr):
@@ -40,7 +41,7 @@ def _copyback_np_state(r, ptr):
     Copy state of of Numba state *ptr* to Numpy random *r*
     """
     index, ints = _helperlib.rnd_get_state(ptr)
-    r.set_state(('MT19937', ints, index, 0, 0.0))
+    r.set_state(("MT19937", ints, index, 0, 0.0))
 
 
 def get_np_state_ptr():
@@ -56,12 +57,13 @@ class rng_link:
     Numba. To achieve this, it copies Numpy's random state to Numba before the
     function call and copies the state in the opposite direction afterwards.
     """
+
     def __init__(self, random_state=None):
         self.random_state = random_state
 
     def __call__(self, func):
         def new_func(*args, **kwargs):
-            link_numba_rng = kwargs.get('link_rngs')
+            link_numba_rng = kwargs.get("link_rngs")
             if link_numba_rng:
                 r = check_random_state(self.random_state)
                 ptr = get_np_state_ptr()
@@ -73,4 +75,5 @@ class rng_link:
                 _copyback_np_state(r, ptr)
 
             return out
+
         return new_func

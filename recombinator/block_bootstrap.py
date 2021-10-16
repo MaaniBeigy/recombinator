@@ -1,15 +1,19 @@
+import typing as tp
+
 import math
+
 import numba
 import numpy as np
-import typing as tp
+
+from recombinator.types import ArrayFloat, ArrayInt
 
 from .numba_rng_tools import rng_link
 from .utilities import (
+    BlockBootstrapType,
     _generate_block_start_indices_and_successive_indices,
-    _verify_shape_of_bootstrap_input_data_and_get_dimensions,
     _grab_sub_samples_from_indices,
     _verify_block_bootstrap_arguments,
-    BlockBootstrapType
+    _verify_shape_of_bootstrap_input_data_and_get_dimensions,
 )
 
 
@@ -17,12 +21,14 @@ from .utilities import (
 # stationary bootstrap
 @rng_link()
 @numba.njit
-def _stationary_bootstrap_loop(block_length: float,
-                               replications: int,
-                               sub_sample_length: int,
-                               indices: np.ndarray,
-                               T: int,
-                               link_rngs: bool) -> np.ndarray:
+def _stationary_bootstrap_loop(
+    block_length: float,
+    replications: int,
+    sub_sample_length: int,
+    indices: tp.Union[ArrayInt, ArrayFloat],
+    T: int,
+    link_rngs: bool,
+) -> tp.Union[ArrayInt, ArrayFloat]:
     """
     This function implements the inner loop for stationary bootstraps. It is JIT
     compiled via Numba for performance.
@@ -42,7 +48,7 @@ def _stationary_bootstrap_loop(block_length: float,
              containing the index into the source data series for each element
              of each sub-sample.
     """
-    limit = 2*T
+    limit = 2 * T
 
     for b in range(replications):
         for t in range(1, sub_sample_length):
@@ -61,12 +67,13 @@ def _stationary_bootstrap_loop(block_length: float,
     return indices
 
 
-def stationary_bootstrap(x: np.ndarray,
-                         block_length: float,
-                         replications: int,
-                         sub_sample_length: tp.Optional[int] = None,
-                         link_rngs: bool = True) \
-        -> np.ndarray:
+def stationary_bootstrap(
+    x: tp.Union[ArrayInt, ArrayFloat],
+    block_length: float,
+    replications: int,
+    sub_sample_length: tp.Optional[int] = None,
+    link_rngs: bool = True,
+) -> tp.Union[ArrayInt, ArrayFloat]:
     """
     This function creates sub-samples from a data series via stationary
     bootstrapping.
@@ -91,7 +98,8 @@ def stationary_bootstrap(x: np.ndarray,
         replications=replications,
         replace=True,
         bootstrap_type=BlockBootstrapType.STATIONARY,
-        sub_sample_length=sub_sample_length)
+        sub_sample_length=sub_sample_length,
+    )
 
     T, _ = _verify_shape_of_bootstrap_input_data_and_get_dimensions(x)
 
@@ -106,18 +114,20 @@ def stationary_bootstrap(x: np.ndarray,
         x = np.vstack((x, x))
 
     # allocate array for the indices into the source array
-    indices = np.zeros((replications, sub_sample_length), dtype=np.int)
+    indices = np.zeros((replications, sub_sample_length), dtype=np.int_)
 
     # randomly initialize the beginning of the first block in each sub-sample
     indices[:, 0] = np.random.randint(T, size=(replications,))
 
     # Loop over B bootstraps
-    indices = _stationary_bootstrap_loop(block_length=block_length,
-                                         replications=replications,
-                                         sub_sample_length=sub_sample_length,
-                                         indices=indices,
-                                         T=T,
-                                         link_rngs=link_rngs)
+    indices = _stationary_bootstrap_loop(
+        block_length=block_length,
+        replications=replications,
+        sub_sample_length=sub_sample_length,
+        indices=indices,
+        T=T,
+        link_rngs=link_rngs,
+    )
 
     # return sub-samples
     return _grab_sub_samples_from_indices(x, indices)
@@ -127,13 +137,15 @@ def stationary_bootstrap(x: np.ndarray,
 # moving block and circular bootstrap - Numba versions
 @rng_link()
 @numba.njit
-def _general_block_bootstrap_loop(block_length: int,
-                                  replications: int,
-                                  block_start_indices: np.ndarray,
-                                  successive_indices: np.ndarray,
-                                  sub_sample_length: tp.Optional[int],
-                                  replace: bool,
-                                  link_rngs: bool) -> np.ndarray:
+def _general_block_bootstrap_loop(
+    block_length: int,
+    replications: int,
+    block_start_indices: tp.Union[ArrayInt, ArrayFloat],
+    successive_indices: tp.Union[ArrayInt, ArrayFloat],
+    sub_sample_length: int,
+    replace: bool,
+    link_rngs: bool,
+) -> tp.Union[ArrayInt, ArrayFloat]:
     """
     This function implements the inner loop for moving block or circular block
     bootstrapping. It is JIT compiled via Numba for performance.
@@ -158,36 +170,39 @@ def _general_block_bootstrap_loop(block_length: int,
     """
     # generate array of indeces into the original time series that describe
     # the composition of the generate sub-samples
-    indices = np.zeros((replications, sub_sample_length), dtype=np.int32)
+    indices: tp.Union[ArrayInt, ArrayFloat] = np.zeros(
+        (replications, sub_sample_length), dtype=np.int32
+    )
 
     # loop over replications bootstraps
     for b in range(replications):
         # generate a random array of block start indices with shape
         # (np.ceil(sub_sample_length/block_length), 1)
-        tmp_indices \
-            = np.random.choice(block_start_indices,
-                               size=(math.ceil(sub_sample_length
-                                               / block_length),
-                                     1),
-                               replace=replace)
+        tmp_indices: tp.Union[ArrayInt, ArrayFloat] = np.random.choice(
+            block_start_indices,
+            size=(math.ceil(sub_sample_length / block_length), 1),
+            replace=replace,
+        )
 
         # ToDo: Move that outside the loop
         # add successive indices to starting indices
-        tmp_indices = (tmp_indices + successive_indices)
+        tmp_indices = tmp_indices + successive_indices
 
         # transform to col vector and and remove excess
-        indices[b, :] = tmp_indices.reshape((-1,))[:sub_sample_length]
+        indices[b, :] = tmp_indices.reshape((-1,))[:sub_sample_length]  # type: ignore
 
     return indices
 
 
-def _general_block_bootstrap(x: np.ndarray,
-                             block_length: int,
-                             replications: int,
-                             sub_sample_length: tp.Optional[int] = None,
-                             replace: bool = True,
-                             circular: bool = False,
-                             link_rngs: bool = True) -> np.ndarray:
+def _general_block_bootstrap(
+    x: tp.Union[ArrayInt, ArrayFloat],
+    block_length: int,
+    replications: int,
+    sub_sample_length: tp.Optional[int] = None,
+    replace: bool = True,
+    circular: bool = False,
+    link_rngs: bool = True,
+) -> tp.Union[ArrayInt, ArrayFloat]:
     """
     This function creates sub-samples from a data series via block based
     bootstrapping using either the circular or moving block scheme.
@@ -218,19 +233,21 @@ def _general_block_bootstrap(x: np.ndarray,
     else:
         bootstrap_type = BlockBootstrapType.MOVING_BLOCK
 
-    _verify_block_bootstrap_arguments(x=x,
-                                      block_length=block_length,
-                                      replications=replications,
-                                      replace=replace,
-                                      bootstrap_type=bootstrap_type,
-                                      sub_sample_length=sub_sample_length)
+    _verify_block_bootstrap_arguments(
+        x=x,
+        block_length=block_length,
+        replications=replications,
+        replace=replace,
+        bootstrap_type=bootstrap_type,
+        sub_sample_length=sub_sample_length,
+    )
 
-    block_start_indices, successive_indices \
-        = _generate_block_start_indices_and_successive_indices(
-                    sample_length=T,
-                    block_length=block_length,
-                    circular=circular,
-                    successive_3d=False)
+    block_start_indices, successive_indices = _generate_block_start_indices_and_successive_indices(
+        sample_length=T,
+        block_length=block_length,
+        circular=circular,
+        successive_3d=False,
+    )
 
     if circular:
         # replicate time-series for wrap-around
@@ -239,25 +256,28 @@ def _general_block_bootstrap(x: np.ndarray,
         else:
             x = np.vstack((x, x))
 
-    indices \
-        = _general_block_bootstrap_loop(block_length=block_length,
-                                        replications=replications,
-                                        block_start_indices=block_start_indices,
-                                        successive_indices=successive_indices,
-                                        sub_sample_length=sub_sample_length,
-                                        replace=replace,
-                                        link_rngs=link_rngs)
+    indices = _general_block_bootstrap_loop(
+        block_length=block_length,
+        replications=replications,
+        block_start_indices=block_start_indices,
+        successive_indices=successive_indices,
+        sub_sample_length=sub_sample_length,
+        replace=replace,
+        link_rngs=link_rngs,
+    )
 
     # return sub-samples
     return _grab_sub_samples_from_indices(x, indices)
 
 
-def moving_block_bootstrap(x: np.ndarray,
-                           block_length: int,
-                           replications: int,
-                           sub_sample_length: tp.Optional[int] = None,
-                           replace: bool = True,
-                           link_rngs: bool = True) -> np.ndarray:
+def moving_block_bootstrap(
+    x: tp.Union[ArrayInt, ArrayFloat],
+    block_length: int,
+    replications: int,
+    sub_sample_length: tp.Optional[int] = None,
+    replace: bool = True,
+    link_rngs: bool = True,
+) -> tp.Union[ArrayInt, ArrayFloat]:
     """
     This function creates sub-samples from a data series via moving block
     bootstrapping.
@@ -278,21 +298,25 @@ def moving_block_bootstrap(x: np.ndarray,
              bootstrapped sub-samples
     """
 
-    return _general_block_bootstrap(x=x,
-                                    block_length=block_length,
-                                    replications=replications,
-                                    sub_sample_length=sub_sample_length,
-                                    replace=replace,
-                                    circular=False,
-                                    link_rngs=link_rngs)
+    return _general_block_bootstrap(
+        x=x,
+        block_length=block_length,
+        replications=replications,
+        sub_sample_length=sub_sample_length,
+        replace=replace,
+        circular=False,
+        link_rngs=link_rngs,
+    )
 
 
-def circular_block_bootstrap(x: np.ndarray,
-                             block_length: int,
-                             replications: int,
-                             sub_sample_length: tp.Optional[int] = None,
-                             replace: bool = True,
-                             link_rngs: bool = True) -> np.ndarray:
+def circular_block_bootstrap(
+    x: tp.Union[ArrayInt, ArrayFloat],
+    block_length: int,
+    replications: int,
+    sub_sample_length: tp.Optional[int] = None,
+    replace: bool = True,
+    link_rngs: bool = True,
+) -> tp.Union[ArrayInt, ArrayFloat]:
     """
     This function creates sub-samples from a data series via circular block
     bootstrapping.
@@ -313,25 +337,27 @@ def circular_block_bootstrap(x: np.ndarray,
              bootstrapped sub-samples
     """
 
-    return _general_block_bootstrap(x=x,
-                                    block_length=block_length,
-                                    replications=replications,
-                                    sub_sample_length=sub_sample_length,
-                                    replace=replace,
-                                    circular=True,
-                                    link_rngs=link_rngs)
+    return _general_block_bootstrap(
+        x=x,
+        block_length=block_length,
+        replications=replications,
+        sub_sample_length=sub_sample_length,
+        replace=replace,
+        circular=True,
+        link_rngs=link_rngs,
+    )
 
 
 def _generalized_block_bootstrap_vectorized(
-        x: np.ndarray,
-        block_length: int,
-        replications: int,
-        circular: bool,
-        sub_sample_length: tp.Optional[int] = None,
-        replace: bool = True,
-        num_pack=np,
-        choice=np.random.choice) \
-        -> np.ndarray:
+    x: tp.Union[ArrayInt, ArrayFloat],
+    block_length: int,
+    replications: int,
+    circular: bool,
+    sub_sample_length: tp.Optional[int] = None,
+    replace: bool = True,
+    num_pack: tp.Any = np,
+    choice: tp.Any = np.random.choice,
+) -> tp.Union[ArrayInt, ArrayFloat]:
     """
     This function creates sub-samples from a data series via circular block
     bootstrapping.
@@ -363,12 +389,13 @@ def _generalized_block_bootstrap_vectorized(
         bootstrap_type = BlockBootstrapType.MOVING_BLOCK
 
     _verify_block_bootstrap_arguments(
-                x=x,
-                block_length=block_length,
-                replications=replications,
-                replace=replace,
-                bootstrap_type=bootstrap_type,
-                sub_sample_length=sub_sample_length)
+        x=x,
+        block_length=block_length,
+        replications=replications,
+        replace=replace,
+        bootstrap_type=bootstrap_type,
+        sub_sample_length=sub_sample_length,
+    )
 
     if circular:
         # replicate time-series for wrap-around
@@ -377,12 +404,12 @@ def _generalized_block_bootstrap_vectorized(
         else:
             x = num_pack.vstack((x, x))
 
-    block_start_indices, successive_indices \
-        = _generate_block_start_indices_and_successive_indices(
-                    sample_length=T,
-                    block_length=block_length,
-                    circular=circular,
-                    successive_3d=True)
+    block_start_indices, successive_indices = _generate_block_start_indices_and_successive_indices(
+        sample_length=T,
+        block_length=block_length,
+        circular=circular,
+        successive_3d=True,
+    )
 
     # print(f'block_start_indices.shape before = {block_start_indices.shape}')
     # print(f'successive_indices.shape before = {successive_indices.shape}')
@@ -393,15 +420,14 @@ def _generalized_block_bootstrap_vectorized(
 
     # generate a random array of block start indices with shape
     # (np.ceil(T/block_length), 1)
-    indices = choice(block_start_indices,
-                     size=(math.ceil(sub_sample_length
-                                     / block_length),
-                           replications,
-                           1),
-                     replace=replace)
+    indices = choice(
+        block_start_indices,
+        size=(math.ceil(sub_sample_length / block_length), replications, 1),
+        replace=replace,
+    )
 
     # add successive indices to starting indices
-    indices = (indices + successive_indices)
+    indices = indices + successive_indices
     # print(indices)
     # print(f'indices.shape = {indices.shape}')
 
@@ -414,14 +440,14 @@ def _generalized_block_bootstrap_vectorized(
 
 
 def circular_block_bootstrap_vectorized(
-        x: np.ndarray,
-        block_length: int,
-        replications: int,
-        sub_sample_length: tp.Optional[int] = None,
-        replace: bool = True,
-        num_pack=np,
-        choice=np.random.choice) \
-        -> np.ndarray:
+    x: tp.Union[ArrayInt, ArrayFloat],
+    block_length: int,
+    replications: int,
+    sub_sample_length: tp.Optional[int] = None,
+    replace: bool = True,
+    num_pack: tp.Any = np,
+    choice: tp.Any = np.random.choice,
+) -> tp.Union[ArrayInt, ArrayFloat]:
     """
     This function creates sub-samples from a data series via circular block
     bootstrapping.
@@ -443,25 +469,26 @@ def circular_block_bootstrap_vectorized(
     """
 
     return _generalized_block_bootstrap_vectorized(
-                x=x,
-                block_length=block_length,
-                replications=replications,
-                circular=True,
-                sub_sample_length=sub_sample_length,
-                replace=replace,
-                num_pack=num_pack,
-                choice=choice)
+        x=x,
+        block_length=block_length,
+        replications=replications,
+        circular=True,
+        sub_sample_length=sub_sample_length,
+        replace=replace,
+        num_pack=num_pack,
+        choice=choice,
+    )
 
 
 def moving_block_bootstrap_vectorized(
-        x: np.ndarray,
-        block_length: int,
-        replications: int,
-        sub_sample_length: tp.Optional[int] = None,
-        replace: bool = True,
-        num_pack=np,
-        choice=np.random.choice) \
-        -> np.ndarray:
+    x: tp.Union[ArrayInt, ArrayFloat],
+    block_length: int,
+    replications: int,
+    sub_sample_length: tp.Optional[int] = None,
+    replace: bool = True,
+    num_pack: tp.Any = np,
+    choice: tp.Any = np.random.choice,
+) -> tp.Union[ArrayInt, ArrayFloat]:
     """
     This function creates sub-samples from a data series via moving block
     bootstrapping. It relies on a vectorized implementation.
@@ -484,11 +511,12 @@ def moving_block_bootstrap_vectorized(
     """
 
     return _generalized_block_bootstrap_vectorized(
-                x=x,
-                block_length=block_length,
-                replications=replications,
-                circular=False,
-                sub_sample_length=sub_sample_length,
-                replace=replace,
-                num_pack=num_pack,
-                choice=choice)
+        x=x,
+        block_length=block_length,
+        replications=replications,
+        circular=False,
+        sub_sample_length=sub_sample_length,
+        replace=replace,
+        num_pack=num_pack,
+        choice=choice,
+    )

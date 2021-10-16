@@ -1,5 +1,9 @@
+import typing as tp
+
 import numpy as np
 import pytest
+
+from recombinator.types import ArrayFloat, ArrayInt
 
 
 @pytest.fixture()
@@ -23,16 +27,18 @@ def number_of_time_series_boostrap_replications() -> int:
 
 
 @pytest.fixture()
-def iid_sample(original_iid_sample_size: int) -> np.ndarray:
+def iid_sample(original_iid_sample_size: int) -> tp.Union[ArrayInt, ArrayFloat]:
     n = original_iid_sample_size
     np.random.seed(1)
-    x = np.abs(np.random.randn(n))
+    x: tp.Union[ArrayInt, ArrayFloat] = np.abs(np.random.randn(n))
 
     return x
 
 
 @pytest.fixture()
-def time_series_sample(original_time_series_sample_size: int) -> np.ndarray:
+def time_series_sample(
+    original_time_series_sample_size: int
+) -> tp.Union[ArrayInt, ArrayFloat]:
     np.random.seed(1)
 
     # number of time periods

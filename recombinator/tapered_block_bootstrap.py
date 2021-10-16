@@ -1,14 +1,17 @@
+import typing as tp
+
 import numba
 import numpy as np
-import typing as tp
+
+from recombinator.types import ArrayFloat, ArrayInt
 
 from .numba_rng_tools import rng_link
 from .utilities import (
-    _verify_shape_of_bootstrap_input_data_and_get_dimensions,
+    BlockBootstrapType,
+    _generate_block_start_indices_and_successive_indices,
     _grab_sub_samples_from_indices,
     _verify_block_bootstrap_arguments,
-    BlockBootstrapType,
-    _generate_block_start_indices_and_successive_indices
+    _verify_shape_of_bootstrap_input_data_and_get_dimensions,
 )
 
 
@@ -25,18 +28,19 @@ def trapezoid(t: float, c: float) -> float:
 
     """
     if 0 <= t < c:
-        return t/c
-    elif c <= t < 1-c:
+        return t / c
+    elif c <= t < 1 - c:
         return 1
-    elif 1-c <= t < 1:
-        return (1-t)/c
+    elif 1 - c <= t < 1:
+        return (1 - t) / c
     else:
         return 0.0
 
 
 @numba.njit
-def compute_weights(block_length: int, c: float = 0.43) \
-        -> tp.Tuple[np.ndarray, np.ndarray]:
+def compute_weights(
+    block_length: int, c: float = 0.43
+) -> tp.Tuple[tp.Union[ArrayInt, ArrayFloat], tp.Union[ArrayInt, ArrayFloat]]:
     """
     This function computes the weights to rescale the samples in a tapered block
     bootstrap from the demeaned time-series. The unscaled weights represent the
@@ -54,26 +58,25 @@ def compute_weights(block_length: int, c: float = 0.43) \
         a Tuple of unscaled_weights and scaled_weights
 
     """
-    js = list(range(1, block_length+1))
-    unscaled_weights \
-        = np.array([trapezoid((j - 0.5)/block_length, c) for j in js])
-    l2_norm_of_weights = np.sqrt(np.sum(unscaled_weights**2))
-    scaled_weights \
-        = unscaled_weights * np.sqrt(block_length) / l2_norm_of_weights
+    js = list(range(1, block_length + 1))
+    unscaled_weights = np.array([trapezoid((j - 0.5) / block_length, c) for j in js])
+    l2_norm_of_weights = np.sqrt(np.sum(unscaled_weights ** 2))
+    scaled_weights = unscaled_weights * np.sqrt(block_length) / l2_norm_of_weights
     return unscaled_weights, scaled_weights
 
 
 @rng_link()
 @numba.njit
-def _tapered_block_bootstrap_internal(block_length: int,
-                                      replications: int,
-                                      sub_sample_length: int,
-                                      T: int,
-                                      k: int,
-                                      y: np.ndarray,
-                                      replace: bool,
-                                      link_rngs: bool) \
-        -> np.ndarray:
+def _tapered_block_bootstrap_internal(
+    block_length: int,
+    replications: int,
+    sub_sample_length: int,
+    T: int,
+    k: int,
+    y: tp.Union[ArrayInt, ArrayFloat],
+    replace: bool,
+    link_rngs: bool,
+) -> tp.Union[ArrayInt, ArrayFloat]:
     # compute the number of blocks (k in the original paper)
     number_of_blocks = int(np.ceil(sub_sample_length / block_length))
 
@@ -101,13 +104,13 @@ def _tapered_block_bootstrap_internal(block_length: int,
 
 
 def tapered_block_bootstrap(
-        x: np.ndarray,
-        block_length: int,
-        replications: int,
-        sub_sample_length: tp.Optional[int] = None,
-        replace: bool = True,
-        link_rngs: bool = True) \
-        -> np.ndarray:
+    x: tp.Union[ArrayInt, ArrayFloat],
+    block_length: int,
+    replications: int,
+    sub_sample_length: tp.Optional[int] = None,
+    replace: bool = True,
+    link_rngs: bool = True,
+) -> tp.Union[ArrayInt, ArrayFloat]:
     """
     This function creates samples from a data series using the tapered block
     bootstrap. It samples overlapping blocks of fixed length. Observations are
@@ -141,11 +144,13 @@ def tapered_block_bootstrap(
         replications=replications,
         replace=replace,
         bootstrap_type=BlockBootstrapType.TAPERED_BLOCK,
-        sub_sample_length=sub_sample_length)
+        sub_sample_length=sub_sample_length,
+    )
 
     if block_length > T:
         raise ValueError(
-            'The argument block_length must not exceed the size of the data.')
+            "The argument block_length must not exceed the size of the data."
+        )
 
     # compute the mean of x
     x_bar = np.mean(x, axis=0)
@@ -162,20 +167,21 @@ def tapered_block_bootstrap(
     output_length = number_of_blocks * block_length
 
     y_star = _tapered_block_bootstrap_internal(
-                block_length=block_length,
-                replications=replications,
-                sub_sample_length=sub_sample_length,
-                T=T,
-                k=k,
-                y=y,
-                replace=replace,
-                link_rngs=link_rngs)
+        block_length=block_length,
+        replications=replications,
+        sub_sample_length=sub_sample_length,
+        T=T,
+        k=k,
+        y=y,
+        replace=replace,
+        link_rngs=link_rngs,
+    )
 
     if k == 1:
         y_star = y_star.reshape((replications, output_length))
 
     # add back the mean
-    x_star = y_star + x_bar
+    x_star: tp.Union[ArrayInt, ArrayFloat] = y_star + x_bar
 
     # cut off observations exceeding the sub-sample length
     x_star = x_star[:, :sub_sample_length]
@@ -184,14 +190,14 @@ def tapered_block_bootstrap(
 
 
 def tapered_block_bootstrap_vectorized(
-        x: np.ndarray,
-        block_length: int,
-        replications: int,
-        sub_sample_length: tp.Optional[int] = None,
-        replace: bool = True,
-        num_pack=np,
-        choice=np.random.choice) \
-        -> np.ndarray:
+    x: tp.Union[ArrayInt, ArrayFloat],
+    block_length: int,
+    replications: int,
+    sub_sample_length: tp.Optional[int] = None,
+    replace: bool = True,
+    num_pack: tp.Any = np,
+    choice: tp.Any = np.random.choice,
+) -> tp.Union[ArrayInt, ArrayFloat]:
     """
     This function creates samples from a data series using the tapered block
     bootstrap. It samples overlapping blocks of fixed length. Observations are
@@ -220,16 +226,18 @@ def tapered_block_bootstrap_vectorized(
         sub_sample_length = T
 
     _verify_block_bootstrap_arguments(
-                x=x,
-                block_length=block_length,
-                replications=replications,
-                replace=replace,
-                bootstrap_type=BlockBootstrapType.TAPERED_BLOCK,
-                sub_sample_length=sub_sample_length)
+        x=x,
+        block_length=block_length,
+        replications=replications,
+        replace=replace,
+        bootstrap_type=BlockBootstrapType.TAPERED_BLOCK,
+        sub_sample_length=sub_sample_length,
+    )
 
     if block_length > T:
         raise ValueError(
-            'The argument block_length must not exceed the size of the data.')
+            "The argument block_length must not exceed the size of the data."
+        )
 
     # compute the mean of x
     x_bar = num_pack.mean(x, axis=0)
@@ -244,44 +252,42 @@ def tapered_block_bootstrap_vectorized(
     number_of_blocks = int(np.ceil(sub_sample_length / block_length))
 
     # replicate scaled weights
-    replicated_scaled_weights = num_pack.tile(num_pack.array(scaled_weights),
-                                              number_of_blocks)
+    replicated_scaled_weights = num_pack.tile(
+        num_pack.array(scaled_weights), number_of_blocks
+    )
 
     if k == 1:
         replicated_scaled_weights = replicated_scaled_weights.reshape((1, -1))
     else:
-        replicated_scaled_weights \
-            = replicated_scaled_weights.reshape((1, -1, 1))
+        replicated_scaled_weights = replicated_scaled_weights.reshape((1, -1, 1))
 
     block_start_indices = num_pack.array(np.arange(np.int32(T - block_length)))
     # generate a 1-d array containing the sequence of integers from
     # 0 to block_length-1 with shape (1, block_length)
-    successive_indices \
-        = num_pack.array(np.arange(block_length, dtype=int)
-                         .reshape((1, 1, block_length)))
+    successive_indices = num_pack.array(
+        np.arange(block_length, dtype=int).reshape((1, 1, block_length))
+    )
 
     # generate a random array of block start indices with shape
     # (np.ceil(T/block_length), 1)
-    indices = choice(block_start_indices,
-                     size=(number_of_blocks,
-                           replications,
-                           1),
-                     replace=replace)
+    indices = choice(
+        block_start_indices, size=(number_of_blocks, replications, 1), replace=replace
+    )
 
     # add successive indices to starting indices
-    indices = (indices + successive_indices)
+    indices = indices + successive_indices
 
     # transform to col vector and and remove excess
     indices = indices.reshape((replications, -1))
 
     # y-star sample simulation
-    y_star = _grab_sub_samples_from_indices(y, indices)
+    y_star: tp.Union[ArrayInt, ArrayFloat] = _grab_sub_samples_from_indices(y, indices)
     y_star *= replicated_scaled_weights
 
     # cut off observations exceeding the sub-sample length
     y_star = y_star[:, :sub_sample_length]
 
     # add back the mean
-    x_star = y_star + x_bar
+    x_star: tp.Union[ArrayInt, ArrayFloat] = y_star + x_bar
 
     return x_star

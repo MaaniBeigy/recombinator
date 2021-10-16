@@ -1,15 +1,17 @@
 # This module is a Python adaptation of Andrew Patten's Matlab implementation
 # available at http://public.econ.duke.edu/~ap172/opt_block_length_REV_dec07.txt
 
+import typing as tp
 
 # from dataclasses import dataclass
 import numpy as np
-import typing as tp
+
+from recombinator.types import ArrayFloat, ArrayInt
 
 
-def mlag(x: np.ndarray,
-         n: tp.Optional[int] = 1,
-         init: tp.Optional[float] = 0.0) -> np.ndarray:
+def mlag(
+    x: tp.Union[ArrayInt, ArrayFloat], n: int = 1, init: tp.Optional[float] = 0.0
+) -> tp.Union[ArrayInt, ArrayFloat]:
     """
     Purpose: generates a matrix of n lags from a matrix (or vector)
     containing a set of vectors (For use in var routines)
@@ -39,24 +41,29 @@ def mlag(x: np.ndarray,
 
     nobs, nvar = x.shape
 
-    xlag = np.ones((nobs, nvar * n), dtype=x.dtype) * init
+    xlag: tp.Union[ArrayInt, ArrayFloat] = np.ones(
+        (nobs, nvar * int(n)), dtype=x.dtype
+    ) * init
     icnt = 0
     for i in range(nvar):
-        for j in range(n):
-            xlag[j + 1:, icnt + j] = x[0:-j - 1, i]
+        for j in range(int(n)):
+            xlag[j + 1 :, icnt + j] = x[0 : -j - 1, i]
         icnt += n
 
     return xlag
 
 
-def lam(kk: np.ndarray) -> np.ndarray:
+def lam(kk: tp.Union[ArrayInt, ArrayFloat]) -> tp.Union[ArrayInt, ArrayFloat]:
     """
     Helper function, calculates the flattop kernel weights.
 
     Adapted for Python August 12, 2018 by Michael C. Nowotny
     """
-    return (np.abs(kk) >= 0) * (np.abs(kk) < 0.5) \
-           + 2 * (1.0 - np.abs(kk)) * (np.abs(kk) >= 0.5) * (np.abs(kk) <= 1)
+    result: tp.Union[ArrayInt, ArrayFloat] = (
+        (np.abs(kk) >= 0) * (np.abs(kk) < 0.5)
+        + 2 * (1.0 - np.abs(kk)) * (np.abs(kk) >= 0.5) * (np.abs(kk) <= 1)
+    )
+    return result
 
 
 # @dataclass(frozen=True)
@@ -67,7 +74,9 @@ class OptimalBlockLength(tp.NamedTuple):
 
 # ToDo: Add calculation of optimal block length for moving block bootstrap
 # ToDo: Add calculation of optimal block length for tapered block bootstrap
-def optimal_block_length(data: np.ndarray) -> tp.Sequence[OptimalBlockLength]:
+def optimal_block_length(
+    data: tp.Union[ArrayInt, ArrayFloat]
+) -> tp.Sequence[OptimalBlockLength]:
     """
     This is a function to select the optimal (in the sense of minimising the MSE
     of the estimator of the long-run variance) block length for the stationary
@@ -110,8 +119,9 @@ def optimal_block_length(data: np.ndarray) -> tp.Sequence[OptimalBlockLength]:
         data = data.reshape((-1, 1))
     elif data.ndim > 2:
         raise ValueError(
-            'data must be a two dimensional NumPy array'
-            '(number of observations x number of variables)')
+            "data must be a two dimensional NumPy array"
+            "(number of observations x number of variables)"
+        )
     n, k = data.shape
 
     # these are optional in the original Matlab implementation
@@ -156,13 +166,15 @@ def optimal_block_length(data: np.ndarray) -> tp.Sequence[OptimalBlockLength]:
         temp2 = temp2[:, kn:]
 
         # checking which are less than the critical value
-        temp2 = np.abs(temp2) < (c * np.sqrt(np.log10(n) / n)
-                                 * np.ones((kn, m_max - kn + 1)))
+        temp2 = np.abs(temp2) < (
+            c * np.sqrt(np.log10(n) / n) * np.ones((kn, m_max - kn + 1))
+        )
 
         # this counts the number of insignificant autocorrelations
         temp2 = np.sum(temp2, axis=0).reshape((1, -1))
-        temp3 = np.hstack((np.arange(1, temp2.shape[1] + 1).reshape((-1, 1)),
-                           temp2.transpose()))
+        temp3 = np.hstack(
+            (np.arange(1, temp2.shape[1] + 1).reshape((-1, 1)), temp2.transpose())
+        )
 
         # selecting all rows where ALL kn auto-correlations are not significant
         temp3 = temp3[np.squeeze(temp2 == kn), :]
@@ -170,8 +182,7 @@ def optimal_block_length(data: np.ndarray) -> tp.Sequence[OptimalBlockLength]:
         if temp3.size == 0:
             # this means that NO collection of kn auto-correlations were all
             # insignificant, so pick largest significant lag
-            m_hat = max(
-                np.flatnonzero(np.abs(temp) > (c * np.sqrt(np.log10(n) / n))))
+            m_hat = max(np.flatnonzero(np.abs(temp) > (c * np.sqrt(np.log10(n) / n))))
         else:
             # if more than one collection is possible, choose the smallest m
             m_hat = temp3[0, 0]
@@ -194,8 +205,7 @@ def optimal_block_length(data: np.ndarray) -> tp.Sequence[OptimalBlockLength]:
 
             # auto-covariances
             acv = temp[:, 0].reshape((-1, 1))
-            acv2 = np.hstack(
-                (-np.arange(1, m + 1).reshape((-1, 1)), acv[1:, :]))
+            acv2 = np.hstack((-np.arange(1, m + 1).reshape((-1, 1)), acv[1:, :]))
             if acv2.shape[0] > 1:
                 acv2 = acv2[acv2[:, 0].argsort(),]
 
@@ -212,20 +222,21 @@ def optimal_block_length(data: np.ndarray) -> tp.Sequence[OptimalBlockLength]:
             # FINAL STEP: constructing the optimal block length estimator
 
             # optimal block lenght for stationary bootstrap
-            b_star_sb = ((2 * (g_hat ** 2) / dsb_hat) ** (1.0 / 3.0)) \
-                     * (n ** (1.0 / 3.0))
+            b_star_sb = ((2 * (g_hat ** 2) / dsb_hat) ** (1.0 / 3.0)) * (
+                n ** (1.0 / 3.0)
+            )
             if b_star_sb > b_max:
                 b_star_sb = b_max
 
             # optimal block length for circular bootstrap
-            b_star_cb = ((2 * (g_hat ** 2) / dcb_hat) ** (1.0 / 3.0)) \
-                        * (n ** (1.0 / 3.0))
+            b_star_cb = ((2 * (g_hat ** 2) / dcb_hat) ** (1.0 / 3.0)) * (
+                n ** (1.0 / 3.0)
+            )
             if b_star_cb > b_max:
                 b_star_cb = b_max
 
             # b_star = (b_star_sb, b_star_cb)
-            b_star = OptimalBlockLength(b_star_sb=b_star_sb,
-                                        b_star_cb=b_star_cb)
+            b_star = OptimalBlockLength(b_star_sb=b_star_sb, b_star_cb=b_star_cb)
         else:
             b_star = OptimalBlockLength(b_star_sb=1.0, b_star_cb=1.0)
 
